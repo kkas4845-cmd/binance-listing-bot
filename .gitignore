@@ -1,0 +1,11 @@
+.env
+config.yaml
+*.db
+*.db-journal
+logs/
+trades.csv
+STOP
+__pycache__/
+.venv/
+venv/
+.pytest_cache/

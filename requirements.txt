@@ -1,0 +1,6 @@
+ccxt>=4.3
+websockets>=12
+aiohttp>=3.9
+PyYAML>=6.0
+python-dotenv>=1.0
+pytest>=8

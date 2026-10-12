@@ -1,0 +1,46 @@
+# Kopier til config.yaml og juster. Alle tall er bevisst forsiktige.
+# Begrunnelsen for hver standardverdi står i README.md (avsnittet "Hvorfor disse tallene").
+
+mode: paper                    # paper = simulert. live = ekte penger
+live_trading_confirmed: false  # må OGSÅ være true for live (dobbel bekreftelse)
+
+exchange: gate                 # gate | mexc | kucoin | bybit | bitget | htx | okx | poloniex
+quote: USDT
+taker_fee_pct: 0.2             # brukes for å regne gebyr i paper mode
+database: bot.db
+
+detector:
+  use_websocket: true          # raskest; krever Binance-nøkkel med bare lesetilgang i .env
+  use_polling: true            # reserve; trenger ingen nøkkel
+  poll_interval_sec: 5         # ikke under 3 – Binance kan blokkere IP-en din
+  max_announcement_age_sec: 120
+  include_seed_tag: true
+  seed_tag_size_factor: 0.5    # halv innsats på "Seed Tag" (Binance sin høyrisiko-merking)
+
+entry:
+  buy_amount_usdt: 20
+  max_slippage_pct: 3          # aldri betal mer enn beste pris + 3 %
+  max_spread_pct: 2
+  min_24h_volume_usdt: 100000
+  min_depth_multiple: 3        # orderboka må tåle 3x kjøpet innenfor slippage-grensen
+  max_chase_pct: 25            # steget mer enn 25 % siden annonseringen? Da er det for sent
+  name_match: strict           # strict | warn | off – beskytter mot feil mynt med samme ticker
+
+exit:
+  stop_loss_pct: 10            # fast stopp. (Originalens 1 % utløses av vanlig støy)
+  trailing_activation_pct: 8   # trailing stop slås på når du er +8 %
+  trailing_distance_pct: 6     # ...og selger hvis prisen faller 6 % fra toppen
+  take_profit_pct: 0           # 0 = av. F.eks. 100 = selg alt på +100 %
+  max_hold_minutes: 720        # selg uansett etter 12 timer
+  sell_after_binance_open_minutes: 10   # selg 10 min etter at handelen åpner på Binance (-1 = av)
+  max_sell_slippage_pct: 5
+  check_interval_sec: 2
+
+risk:
+  max_open_positions: 3
+  max_daily_spend_usdt: 65     # 3 kjøp à 20 USDT + gebyr
+  daily_loss_limit_usdt: 30    # nådd? Ingen nye kjøp før neste døgn (UTC)
+  max_consecutive_losses: 3
+  pause_hours_after_losses: 24
+  ticker_cooldown_days: 30
+  kill_switch_file: STOP       # lag en fil som heter STOP i mappen = ingen nye kjøp
