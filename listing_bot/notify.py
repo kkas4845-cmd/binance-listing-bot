@@ -8,7 +8,8 @@ log = logging.getLogger("listing_bot.notify")
 
 
 class Notifier:
-    def __init__(self) -> None:
+    def __init__(self, prefix: str = "") -> None:
+        self.prefix = f"[{prefix}] " if prefix else ""
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         self.chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -17,6 +18,7 @@ class Notifier:
         return bool(self.token and self.chat_id)
 
     async def send(self, text: str) -> None:
+        text = self.prefix + text
         log.info("VARSEL: %s", text)
         if not self.enabled:
             return

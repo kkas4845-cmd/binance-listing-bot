@@ -82,6 +82,8 @@ class Config:
     quote: str = "USDT"
     taker_fee_pct: float = 0.2          # brukes i paper mode
     database: str = "bot.db"
+    name: str = ""                      # vises foran varsler, f.eks. "PAPER" eller "LIVE"
+    heartbeat_hours: float = 24         # "jeg lever"-melding med status. 0 = av
     detector: DetectorConfig = field(default_factory=DetectorConfig)
     entry: EntryConfig = field(default_factory=EntryConfig)
     exit: ExitConfig = field(default_factory=ExitConfig)
@@ -147,7 +149,9 @@ def load(path: str) -> Config:
         raise ConfigError("PyYAML mangler. Kjør: pip install -r requirements.txt") from e
     try:
         from dotenv import load_dotenv  # type: ignore
-        load_dotenv()
+        # .env ved siden av config-filen (viktig når flere instanser kjører på en server)
+        load_dotenv(os.path.join(os.path.dirname(os.path.abspath(path)), ".env"))
+        load_dotenv(os.path.join(os.getcwd(), ".env"))
     except ImportError:  # pragma: no cover
         pass
     if not os.path.exists(path):
@@ -200,6 +204,9 @@ def validate(cfg: Config) -> None:
         errs.append("detector.poll_interval_sec under 3 sek gir stor risiko for IP-blokk fra Binance")
     if not 0 < d.seed_tag_size_factor <= 1:
         errs.append("detector.seed_tag_size_factor må være mellom 0 og 1")
+
+    if cfg.heartbeat_hours < 0:
+        errs.append("heartbeat_hours må være 0 (av) eller mer")
 
     if cfg.mode == "live" and not cfg.live_trading_confirmed:
         errs.append("mode: live krever også live_trading_confirmed: true (bevisst dobbel bekreftelse)")

@@ -8,6 +8,8 @@ exchange: gate                 # gate | mexc | kucoin | bybit | bitget | htx | o
 quote: USDT
 taker_fee_pct: 0.2             # brukes for å regne gebyr i paper mode
 database: bot.db
+name: ""                       # vises foran Telegram-varsler, f.eks. PAPER eller LIVE
+heartbeat_hours: 24            # "jeg lever"-melding med status på mobilen. 0 = av
 
 detector:
   use_websocket: true          # raskest; krever Binance-nøkkel med bare lesetilgang i .env

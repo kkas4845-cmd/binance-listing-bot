@@ -155,6 +155,7 @@ class Detector:
                 try:
                     async with s.get(LIST_URL, timeout=aiohttp.ClientTimeout(total=10)) as r:
                         if r.status in (403, 418, 429):
+                            self.healthy["polling"] = False
                             backoff = min(max(backoff * 2, 30), 600)
                             log.warning("Binance svarte %s (rate limit/blokk) – venter %ss", r.status, backoff)
                             await asyncio.sleep(backoff)

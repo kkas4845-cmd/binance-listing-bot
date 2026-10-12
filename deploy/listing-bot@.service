@@ -1,0 +1,27 @@
+[Unit]
+Description=Binance listing bot (%i)
+After=network-online.target time-sync.target
+Wants=network-online.target
+# Ikke start i en evig løkke ved feil config: maks 10 forsøk per 10 min
+StartLimitIntervalSec=600
+StartLimitBurst=10
+
+[Service]
+User=listingbot
+Group=listingbot
+WorkingDirectory=/opt/listing-bot/instances/%i
+Environment=PYTHONPATH=/opt/listing-bot/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/listing-bot/venv/bin/python -m listing_bot run
+Restart=always
+RestartSec=15
+
+# Sikkerhet: boten kan bare skrive i sin egen instansmappe
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/listing-bot/instances/%i
+
+[Install]
+WantedBy=multi-user.target

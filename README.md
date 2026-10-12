@@ -62,7 +62,7 @@ Før boten ble laget, ble det sjekket hva andre har funnet ut om denne strategie
 Mac/Linux: bruk `source .venv/bin/activate`, `cp` i stedet for `copy`, og `./start.sh`.
 
 ### Testing uten nett
-`python -m unittest discover -s tests -t .` kjører 36 tester av tolking, risikosperrer, salgslogikk og hele kjøp→salg-flyten med en falsk børs.
+`python -m unittest discover -s tests -t .` kjører alle testene av tolking, risikosperrer, salgslogikk og hele kjøp→salg-flyten med en falsk børs.
 
 ---
 
@@ -85,11 +85,15 @@ Nøkler legges i `.env`, som aldri lastes opp til GitHub (den står i `.gitignor
 
 ## Hvor skal boten kjøre?
 
-Boten må kjøre **hele tiden** – en annonsering kan komme når som helst.
+Boten må kjøre **hele tiden** – en annonsering kan komme når som helst. Du har tre valg:
 
-- **Egen PC:** gratis, men må stå på og ikke gå i dvale.
-- **Gratis sky-server:** f.eks. Oracle Cloud «Always Free». En server i Asia (Tokyo/Singapore) er nærmere Binance og gir lavere forsinkelse.
-- **Ikke GitHub Actions:** jobber der har tidsbegrensning og planlagte kjøringer har minst 5 minutters intervall og kan bli forsinket – altfor tregt for dette. GitHub brukes her til å lagre koden og kjøre testene automatisk.
+- **[Gratis Oracle Cloud-server](deploy/ORACLE.md)** – 0 kr, PC-en kan være av.
+- **[Betalt VPS (Hetzner m.fl.)](deploy/VPS.md)** – ca. 4–8 €/mnd, mest forutsigbart.
+- **Egen PC** – gratis, men må stå på og ikke gå i dvale (se oppsettet over).
+
+Begge server-versjonene installeres med én kommando, har nøyaktig samme funksjoner, og kan kjøre late-penger og ekte penger side om side. Sammenligning: [deploy/README.md](deploy/README.md).
+
+**Ikke GitHub Actions:** jobber der har tidsbegrensning og planlagte kjøringer har minst 5 minutters intervall – altfor tregt. GitHub brukes til å lagre koden og kjøre testene automatisk.
 
 ---
 

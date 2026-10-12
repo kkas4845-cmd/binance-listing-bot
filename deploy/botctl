@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Enkel styring av boten på serveren. Kjør "botctl help".
+set -uo pipefail
+
+BASE=/opt/listing-bot
+APP="$BASE/app"
+VENV="$BASE/venv"
+INST="$BASE/instances"
+SVC_USER=listingbot
+
+cmd="${1:-help}"
+name="${2:-paper}"
+dir="$INST/$name"
+
+# Alle kommandoer unntatt help trenger root (config og nøkler er lesbare bare for boten)
+if [[ "$cmd" != "help" && $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+need_root() { :; }
+need_inst() { [[ -d "$dir" ]] || { echo "Fant ikke instansen '$name'. Finnes: $(ls "$INST" 2>/dev/null | tr '\n' ' ')"; exit 1; }; }
+run_bot() {  # kjør en bot-kommando som tjenestebrukeren, i instansmappen
+  sudo -u "$SVC_USER" env PYTHONPATH="$APP" bash -c "cd '$dir' && '$VENV/bin/python' -m listing_bot $*"
+}
+
+case "$cmd" in
+  status)
+    for d in "$INST"/*/; do
+      n=$(basename "$d")
+      state=$(systemctl is-active "listing-bot@$n" 2>/dev/null)
+      mode=$(grep -E '^mode:' "$d/config.yaml" 2>/dev/null | awk '{print $2}')
+      conf=$(grep -E '^live_trading_confirmed:' "$d/config.yaml" 2>/dev/null | awk '{print $2}')
+      real="simulert"; [[ "$mode" == "live" && "$conf" == "true" ]] && real="EKTE PENGER"
+      stop=""; [[ -f "$d/STOP" ]] && stop="  ⛔ nødstopp på"
+      printf "%-8s %-10s %s%s\n" "$n" "$state" "$real" "$stop"
+    done ;;
+  start|stop|restart)
+    need_root "$@"; need_inst
+    systemctl "$cmd" "listing-bot@$name" && echo "$cmd: $name OK" ;;
+  logs)
+    need_inst; tail -n "${3:-60}" -f "$dir/logs/bot.log" ;;
+  config)
+    need_root "$@"; need_inst; nano "$dir/config.yaml"
+    echo "Husk: botctl restart $name" ;;
+  keys)
+    need_root "$@"; need_inst; nano "$dir/.env"; chmod 600 "$dir/.env"; chown "$SVC_USER:$SVC_USER" "$dir/.env"
+    echo "Husk: botctl restart $name" ;;
+  check)
+    need_root "$@"; need_inst; run_bot check ;;
+  trades)
+    need_root "$@"; need_inst; run_bot status ;;
+  export)
+    need_root "$@"; need_inst; run_bot export trades.csv && echo "Fil: $dir/trades.csv" ;;
+  simulate)
+    need_root "$@"; need_inst
+    title="${3:-Binance Will List Arbitrum (ARB)}"
+    run_bot simulate "\"$title\"" --watch-minutes "${4:-3}" ;;
+  pause)
+    need_root "$@"; need_inst; sudo -u "$SVC_USER" touch "$dir/STOP"
+    echo "⛔ $name kjøper ikke noe nytt (åpne posisjoner selges fortsatt etter reglene)." ;;
+  resume)
+    need_root "$@"; need_inst; rm -f "$dir/STOP"; echo "✅ $name kan kjøpe igjen." ;;
+  update)
+    need_root "$@"
+    git -C "$APP" pull --ff-only || exit 1
+    "$VENV/bin/pip" install -q -r "$APP/requirements.txt"
+    (cd "$APP" && "$VENV/bin/python" -m unittest discover -s tests -t . -q) || { echo "Tester feilet – starter IKKE på nytt"; exit 1; }
+    cp "$APP/deploy/listing-bot@.service" /etc/systemd/system/ && systemctl daemon-reload
+    install -m 755 "$APP/deploy/botctl" /usr/local/bin/botctl
+    chown -R "$SVC_USER:$SVC_USER" "$BASE"
+    for d in "$INST"/*/; do
+      n=$(basename "$d")
+      systemctl is-active --quiet "listing-bot@$n" && systemctl restart "listing-bot@$n" && echo "Restartet $n"
+    done ;;
+  add-live)
+    need_root "$@"
+    if [[ -d "$INST/live" ]]; then echo "live finnes allerede"; exit 0; fi
+    mkdir -p "$INST/live/logs"
+    cp "$APP/config.example.yaml" "$INST/live/config.yaml"
+    sed -i 's/^name: ""/name: "LIVE"/' "$INST/live/config.yaml"
+    cp "$APP/.env.example" "$INST/live/.env"
+    chmod 600 "$INST/live/.env" "$INST/live/config.yaml"
+    chown -R "$SVC_USER:$SVC_USER" "$INST/live"
+    systemctl enable "listing-bot@live" >/dev/null
+    echo "Laget live-instans (står fortsatt i paper). Neste: botctl keys live, sudo botctl config live, sudo botctl start live" ;;
+  help|*)
+    cat <<EOF
+botctl – styr listing-boten   (instans = paper eller live, standard paper. Ber om passord ved behov)
+
+  botctl status                  Viser om instansene kjører, og om det er ekte penger
+  botctl logs [instans]          Følg loggen live (Ctrl+C for å gå ut)
+  botctl start|stop|restart [instans]
+  botctl config [instans]   Rediger innstillinger (config.yaml)
+  botctl keys [instans]     Rediger nøkler og Telegram (.env)
+  botctl check [instans]    Test oppsett og børstilkobling
+  botctl simulate [instans] "Binance Will List X (X)"   Øv uten penger
+  botctl trades [instans]   Handler og resultat
+  botctl export [instans]   Handler til CSV (skattemeldingen)
+  botctl pause [instans]    Nødstopp: ingen nye kjøp
+  botctl resume [instans]   Opphev nødstopp
+  botctl add-live           Lag en ekstra instans for ekte penger
+  botctl update             Hent ny kode fra GitHub, test og restart
+EOF
+    ;;
+esac

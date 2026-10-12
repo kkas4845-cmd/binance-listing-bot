@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 
 from . import exits, risk
@@ -21,7 +22,10 @@ class App:
         self.cfg = cfg
         self.store = Store(cfg.database)
         self.market = Market(cfg)
-        self.notify = Notifier()
+        self.notify = Notifier(cfg.name)
+        self.detector: Detector | None = None
+        self.started_ms = now_ms()
+        self.announcements_seen = 0
         self.queue: asyncio.Queue[Announcement] = asyncio.Queue()
         self._buy_lock = asyncio.Lock()
         self._selling: set[int] = set()
@@ -37,21 +41,63 @@ class App:
                 raise RuntimeError(f"For lite {self.cfg.quote} på {self.cfg.exchange}: {bal:.2f}")
             mode += f" | saldo {bal:.2f} {self.cfg.quote}"
         open_pos = self.store.open_positions(self.cfg.mode)
+        hb = (f" Statusmelding hver {self.cfg.heartbeat_hours:g}. time." if self.cfg.heartbeat_hours else "")
         await self.notify.send(f"🤖 Listing-bot startet på {self.cfg.exchange} i {mode}. "
-                               f"Åpne posisjoner: {len(open_pos)}")
+                               f"Åpne posisjoner: {len(open_pos)}.{hb}")
 
     async def run(self) -> None:
         await self.start()
-        detector = Detector(self.cfg, self.queue)
+        self.detector = Detector(self.cfg, self.queue)
         try:
-            await asyncio.gather(detector.run(), self._consume(), self._exit_loop())
+            await asyncio.gather(self.detector.run(), self._consume(), self._exit_loop(),
+                                 self._health_loop())
         finally:
             await self.market.close()
+
+    # ------------------------------------------------------------ helse
+    def status_text(self) -> str:
+        mode = self.cfg.mode
+        open_pos = self.store.open_positions(mode)
+        day = 86_400_000
+        pnl_24h = self.store.realized_pnl_since(now_ms() - day, mode)
+        pnl_all = self.store.realized_pnl_since(0, mode)
+        h = self.detector.healthy if self.detector else {}
+        src = ", ".join(f"{k}: {'OK' if v else 'feil'}" for k, v in h.items()
+                        if (k == "websocket" and self.cfg.detector.use_websocket and self.cfg.binance_api_key)
+                        or (k == "polling" and self.cfg.detector.use_polling))
+        up_h = (now_ms() - self.started_ms) / 3_600_000
+        stop = " | ⛔ NØDSTOPP AKTIV" if os.path.exists(self.cfg.risk.kill_switch_file) else ""
+        return (f"Oppe i {up_h:.0f} t | Kilder: {src or 'ingen'} | Åpne posisjoner: {len(open_pos)} | "
+                f"Resultat 24t: {pnl_24h:+.2f}, totalt: {pnl_all:+.2f} {self.cfg.quote}{stop}")
+
+    async def _health_loop(self) -> None:
+        """Sender jevnlig "jeg lever"-melding, og varsler hvis boten ikke får inn annonseringer."""
+        last_beat = time.time()
+        down_since: float | None = None
+        warned = False
+        await asyncio.sleep(60)
+        while True:
+            h = self.detector.healthy if self.detector else {}
+            if h and not any(h.values()):
+                down_since = down_since or time.time()
+                if not warned and time.time() - down_since > 300:
+                    warned = True
+                    await self.notify.send("⚠️ Boten har ikke kontakt med Binance-annonseringene (5+ min). "
+                                           "Den ser ingen nye listinger før dette løser seg. Sjekk logs/bot.log.")
+            else:
+                if warned:
+                    await self.notify.send("✅ Kontakten med Binance-annonseringene er tilbake.")
+                down_since, warned = None, False
+            if self.cfg.heartbeat_hours > 0 and time.time() - last_beat >= self.cfg.heartbeat_hours * 3600:
+                last_beat = time.time()
+                await self.notify.send("💓 " + self.status_text())
+            await asyncio.sleep(30)
 
     # ------------------------------------------------------------ annonseringer
     async def _consume(self) -> None:
         while True:
             ann = await self.queue.get()
+            self.announcements_seen += 1
             try:
                 await self.handle_announcement(ann)
             except Exception as e:  # noqa: BLE001

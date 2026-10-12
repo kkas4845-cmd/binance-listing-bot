@@ -277,6 +277,13 @@ class TestApp(unittest.TestCase):
         self.assertEqual(len(app.market.buys), 1)
         app.store.db.close()
 
+    def test_status_text_and_prefix(self):
+        self.run_(self.app.handle_announcement(self.ann("Binance Will List Foo (FOO)")))
+        txt = self.app.status_text()
+        self.assertIn("Åpne posisjoner: 1", txt)
+        from listing_bot.notify import Notifier
+        self.assertEqual(Notifier("LIVE").prefix, "[LIVE] ")
+
     def test_export(self):
         self.run_(self.app.handle_announcement(self.ann("Binance Will List Foo (FOO)")))
         n = self.app.store.export_csv("x.csv")

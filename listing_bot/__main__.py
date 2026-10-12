@@ -68,6 +68,7 @@ async def cmd_simulate(cfg, title: str, body: str, watch_minutes: float) -> int:
     if cfg.is_live:
         print("simulate er bare tillatt i paper mode.")
         return 2
+    cfg.database = "simulate.db"  # egen database, så øving ikke blandes med ekte drift
     app = App(cfg)
     await app.market.connect()
     try:
